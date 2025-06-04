@@ -2,6 +2,9 @@ use iced::keyboard;
 use iced::widget::{button, column, container, row, text};
 use iced::{Element, Subscription, Task, Theme};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Direction {
@@ -17,16 +20,26 @@ pub enum Message {
     NewGame,
     ToggleDarkMode,
     Quit,
+    Undo,
     KeyPressed(keyboard::Key, keyboard::Modifiers),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Game {
     board: [[u32; 4]; 4],
     score: u32,
     game_over: bool,
     won: bool,
     dark_mode: bool,
+    history: Vec<GameState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct GameState {
+    board: [[u32; 4]; 4],
+    score: u32,
+    game_over: bool,
+    won: bool,
 }
 
 impl Game {
@@ -37,6 +50,7 @@ impl Game {
             game_over: false,
             won: false,
             dark_mode: false,
+            history: Vec::new(),
         };
         game.add_random_tile();
         game.add_random_tile();
@@ -50,6 +64,7 @@ impl Game {
             game_over: false,
             won: false,
             dark_mode,
+            history: Vec::new(),
         };
         game.add_random_tile();
         game.add_random_tile();
@@ -74,6 +89,9 @@ impl Game {
     }
 
     fn move_tiles(&mut self, direction: Direction) -> bool {
+        // Save current state before making a move
+        self.save_state();
+
         let old_board = self.board;
 
         match direction {
@@ -87,6 +105,9 @@ impl Game {
         if moved {
             self.add_random_tile();
             self.check_game_state();
+        } else {
+            // If no move was made, remove the saved state
+            self.history.pop();
         }
 
         moved
@@ -276,6 +297,60 @@ impl Game {
 
         self.game_over = true;
     }
+
+    fn save_state(&mut self) {
+        let state = GameState {
+            board: self.board,
+            score: self.score,
+            game_over: self.game_over,
+            won: self.won,
+        };
+        self.history.push(state);
+    }
+
+    fn undo(&mut self) -> bool {
+        if let Some(previous_state) = self.history.pop() {
+            self.board = previous_state.board;
+            self.score = previous_state.score;
+            self.game_over = previous_state.game_over;
+            self.won = previous_state.won;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn can_undo(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    fn save_file_path() -> Option<PathBuf> {
+        dirs::data_dir().and_then(|mut path| {
+            path.push("iced-2048");
+            std::fs::create_dir_all(&path).ok()?;
+            path.push("save.json");
+            Some(path)
+        })
+    }
+
+    fn save(&self) {
+        if let Some(path) = Self::save_file_path() {
+            if let Ok(json) = serde_json::to_string_pretty(self) {
+                let _ = fs::write(path, json);
+            }
+        }
+    }
+
+    fn load() -> Option<Self> {
+        if let Some(path) = Self::save_file_path() {
+            if let Ok(contents) = fs::read_to_string(path) {
+                if let Ok(game) = serde_json::from_str::<Game>(&contents) {
+                    return Some(game);
+                }
+            }
+        }
+        None
+    }
 }
 
 fn update(game: &mut Game, message: Message) -> Task<Message> {
@@ -283,17 +358,24 @@ fn update(game: &mut Game, message: Message) -> Task<Message> {
         Message::Move(direction) => {
             if !game.game_over {
                 game.move_tiles(direction);
+                game.save();
             }
         }
         Message::NewGame => {
             let current_dark_mode = game.dark_mode;
             *game = Game::new_with_theme(current_dark_mode);
+            game.save();
         }
         Message::ToggleDarkMode => {
             game.dark_mode = !game.dark_mode;
+            game.save();
         }
         Message::Quit => {
             return iced::exit();
+        }
+        Message::Undo => {
+            game.undo();
+            game.save();
         }
         Message::KeyPressed(key, _modifiers) => {
             if let keyboard::Key::Named(named_key) = key {
@@ -301,26 +383,31 @@ fn update(game: &mut Game, message: Message) -> Task<Message> {
                     keyboard::key::Named::ArrowUp => {
                         if !game.game_over {
                             game.move_tiles(Direction::Up);
+                            game.save();
                         }
                     }
                     keyboard::key::Named::ArrowDown => {
                         if !game.game_over {
                             game.move_tiles(Direction::Down);
+                            game.save();
                         }
                     }
                     keyboard::key::Named::ArrowLeft => {
                         if !game.game_over {
                             game.move_tiles(Direction::Left);
+                            game.save();
                         }
                     }
                     keyboard::key::Named::ArrowRight => {
                         if !game.game_over {
                             game.move_tiles(Direction::Right);
+                            game.save();
                         }
                     }
                     keyboard::key::Named::Space => {
                         let current_dark_mode = game.dark_mode;
                         *game = Game::new_with_theme(current_dark_mode);
+                        game.save();
                     }
                     _ => {}
                 }
@@ -394,10 +481,11 @@ fn view(game: &Game) -> Element<Message> {
                 (bg, text_color)
             };
 
-            let tile = container(text(tile_text).size(24).color(text_color))
-                .width(80)
-                .height(80)
-                .center(iced::Length::Fill)
+            let tile = container(text(tile_text).size(28).color(text_color))
+                .width(90)
+                .height(90)
+                .align_x(iced::Alignment::Center)
+                .align_y(iced::Alignment::Center)
                 .style(move |_theme: &Theme| iced::widget::container::Style {
                     background: Some(iced::Background::Color(background_color)),
                     border: iced::Border {
@@ -407,19 +495,19 @@ fn view(game: &Game) -> Element<Message> {
                             iced::Color::from_rgb(0.7, 0.7, 0.7)
                         },
                         width: 2.0,
-                        radius: 5.0.into(),
+                        radius: 8.0.into(),
                     },
                     ..Default::default()
                 });
 
             board_cols.push(tile.into());
         }
-        board_rows.push(row(board_cols).spacing(10).into());
+        board_rows.push(row(board_cols).spacing(8).into());
     }
 
-    let board = column(board_rows).spacing(10);
+    let board = column(board_rows).spacing(8);
 
-    let new_game_button = button("New Game").on_press(Message::NewGame).padding(10);
+    let new_game_button = button("New Game").on_press(Message::NewGame).padding(12);
 
     let toggle_theme_button = button(if game.dark_mode {
         "Light Mode"
@@ -427,17 +515,24 @@ fn view(game: &Game) -> Element<Message> {
         "Dark Mode"
     })
     .on_press(Message::ToggleDarkMode)
-    .padding(10);
+    .padding(12);
+
+    let undo_button = if game.can_undo() {
+        button("Undo").on_press(Message::Undo).padding(12)
+    } else {
+        button("Undo").padding(12) // Disabled button
+    };
 
     let status_text = if game.won && !game.game_over {
         text("You Win! Keep playing or start a new game.").size(18)
     } else if game.game_over {
         text("Game Over! Try again.").size(18)
     } else {
-        text("Use WASD/arrows to move • Space to reset • P for dark mode • Ctrl+Q to quit").size(16)
+        text("Use WASD/arrows to move • Space to reset • Z to undo • P for dark mode • Ctrl+Q to quit")
+            .size(16)
     };
 
-    let button_row = row![new_game_button, toggle_theme_button].spacing(10);
+    let button_row = row![new_game_button, toggle_theme_button, undo_button].spacing(12);
 
     let content = column![title, score_text, board, status_text, button_row]
         .spacing(20)
@@ -485,6 +580,7 @@ fn subscription(_game: &Game) -> Subscription<Message> {
                         modifiers,
                     )),
                     "p" | "P" => Some(Message::ToggleDarkMode),
+                    "z" | "Z" => Some(Message::Undo),
                     _ => None,
                 }
             }
@@ -502,8 +598,11 @@ fn theme(game: &Game) -> Theme {
 }
 
 fn main() -> iced::Result {
-    iced::application("2048 - Iced", update, view)
+    iced::application("2048", update, view)
         .subscription(subscription)
         .theme(theme)
-        .run_with(|| (Game::new(), Task::none()))
+        .run_with(|| {
+            let game = Game::load().unwrap_or_else(Game::new);
+            (game, Task::none())
+        })
 }
