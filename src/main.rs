@@ -324,6 +324,17 @@ impl Game {
         !self.history.is_empty()
     }
 
+    fn reset_tiles(&mut self) {
+        // Reset board and game state but preserve history and settings
+        self.board = [[0; 4]; 4];
+        self.score = 0;
+        self.game_over = false;
+        self.won = false;
+        // Keep history and dark_mode unchanged
+        self.add_random_tile();
+        self.add_random_tile();
+    }
+
     fn save_file_path() -> Option<PathBuf> {
         dirs::data_dir().and_then(|mut path| {
             path.push("iced-2048");
@@ -405,8 +416,7 @@ fn update(game: &mut Game, message: Message) -> Task<Message> {
                         }
                     }
                     keyboard::key::Named::Space => {
-                        let current_dark_mode = game.dark_mode;
-                        *game = Game::new_with_theme(current_dark_mode);
+                        game.reset_tiles();
                         game.save();
                     }
                     _ => {}
@@ -448,7 +458,18 @@ fn view(game: &Game) -> Element<Message> {
                     512 => iced::Color::from_rgb(0.9, 0.8, 0.1),
                     1024 => iced::Color::from_rgb(1.0, 0.9, 0.1),
                     2048 => iced::Color::from_rgb(1.0, 0.8, 0.0),
-                    _ => iced::Color::from_rgb(0.8, 0.2, 0.8),
+                    4096 => iced::Color::from_rgb(0.9, 0.1, 0.9),
+                    8192 => iced::Color::from_rgb(0.8, 0.2, 0.9),
+                    16384 => iced::Color::from_rgb(0.7, 0.3, 0.9),
+                    32768 => iced::Color::from_rgb(0.6, 0.4, 0.9),
+                    65536 => iced::Color::from_rgb(0.5, 0.5, 0.9),
+                    131072 => iced::Color::from_rgb(0.4, 0.6, 0.9),
+                    262144 => iced::Color::from_rgb(0.3, 0.7, 0.9),
+                    524288 => iced::Color::from_rgb(0.2, 0.8, 0.9),
+                    1048576 => iced::Color::from_rgb(0.1, 0.9, 0.9),
+                    2097152 => iced::Color::from_rgb(0.0, 1.0, 0.9),
+                    4194304 => iced::Color::from_rgb(0.0, 0.9, 1.0),
+                    _ => iced::Color::from_rgb(0.3, 0.6, 0.9),
                 };
                 let text_color = if tile_value <= 4 && tile_value > 0 {
                     iced::Color::from_rgb(0.8, 0.8, 0.8)
@@ -471,6 +492,17 @@ fn view(game: &Game) -> Element<Message> {
                     512 => iced::Color::from_rgb(0.9, 0.8, 0.2),
                     1024 => iced::Color::from_rgb(0.9, 0.8, 0.1),
                     2048 => iced::Color::from_rgb(1.0, 0.8, 0.0),
+                    4096 => iced::Color::from_rgb(0.8, 0.1, 0.8),
+                    8192 => iced::Color::from_rgb(0.7, 0.2, 0.8),
+                    16384 => iced::Color::from_rgb(0.6, 0.3, 0.8),
+                    32768 => iced::Color::from_rgb(0.5, 0.4, 0.8),
+                    65536 => iced::Color::from_rgb(0.4, 0.5, 0.8),
+                    131072 => iced::Color::from_rgb(0.3, 0.6, 0.8),
+                    262144 => iced::Color::from_rgb(0.2, 0.7, 0.8),
+                    524288 => iced::Color::from_rgb(0.1, 0.8, 0.8),
+                    1048576 => iced::Color::from_rgb(0.0, 0.9, 0.8),
+                    2097152 => iced::Color::from_rgb(0.0, 0.8, 0.9),
+                    4194304 => iced::Color::from_rgb(0.0, 0.7, 0.9),
                     _ => iced::Color::from_rgb(0.2, 0.2, 0.2),
                 };
                 let text_color = if tile_value <= 4 && tile_value > 0 {

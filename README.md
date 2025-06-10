@@ -7,6 +7,8 @@ The game 2048 for desktop using Iced and Rust
 - [x] Dark mode (toggle with P key)
 - [x] Unlimited undo (Z key)
 - [x] Automatic save
+- [x] Beyond 2048
+- [ ] Tile Animation
 
 ## Controls
 
